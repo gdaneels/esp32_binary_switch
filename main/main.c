@@ -17,6 +17,6 @@ void app_main(void)
     if (!message_queue) {
         ESP_LOGE(tag, "Message queue could not be initialized.");
     }
-    init_display_task(message_queue);
     init_io_task(message_queue);
+    init_display_task(message_queue);
 }

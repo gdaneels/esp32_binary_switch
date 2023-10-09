@@ -8,8 +8,13 @@
 
 static void display_task(void* arg) {
     ESP_LOGD(tag, "In display task.");
+
+    QueueHandle_t message_queue = (QueueHandle_t)arg;
     while(1) {
-        vTaskDelay(pdMS_TO_TICKS(100));
+        uint8_t number = 0;
+        if (xQueueReceive(message_queue, &number, (TickType_t)10)) { 
+            ESP_LOGI(tag, "Received message: %"PRIu8"", number);
+        }
     }
 }
 
@@ -21,7 +26,7 @@ esp_err_t init_display_task(QueueHandle_t message_queue)
 
     /* Start transmit task */
     if (pdPASS != xTaskCreate(display_task, "display_task",
-                              2048, NULL,
+                              2048, message_queue,
                               1, NULL)) {
         ESP_LOGE(tag, "failed to start the display task, rc=%d", rc);
         return ESP_FAIL;

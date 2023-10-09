@@ -66,8 +66,14 @@ static void io_task(void* arg) {
         printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
         uint8_t bitmap = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
         printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
+
+        if(xQueueSend(message_queue, &bitmap, (TickType_t)10) != pdPASS)
+        {
+            ESP_LOGE(tag, "Could not send message to message queue.");
+        }
+
         vTaskDelay(pdMS_TO_TICKS(100));
-        cnt += 2;
+        cnt += 1;
     }
 }
 
