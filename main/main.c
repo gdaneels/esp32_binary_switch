@@ -51,8 +51,8 @@ void init_gpio(void) {
 
 void app_main(void)
 {
-    init_display();
-    init_io();
+    init_display_task();
+    init_io_task();
     init_gpio();
     size_t cnt = 0;
     while (1) {
@@ -65,7 +65,7 @@ void app_main(void)
         int level_switch_4 = gpio_get_level(SWITCH_4);
         printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
         uint8_t bitmap = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
-        printf("Current bitmap: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY(bitmap));
+        printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
         vTaskDelay(pdMS_TO_TICKS(100));
         cnt += 2;
     }
