@@ -13,7 +13,7 @@ static void display_task(void* arg) {
     }
 }
 
-esp_err_t init_display_task(void)
+esp_err_t init_display_task(QueueHandle_t message_queue)
 {
     esp_err_t rc = ESP_OK;
 

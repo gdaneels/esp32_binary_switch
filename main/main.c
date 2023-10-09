@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <inttypes.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
 #include "driver/gpio.h"
 #include "display.h"
 #include "io.h"
@@ -27,6 +28,11 @@
 #define SWITCH_4 GPIO_NUM_19
 #define BUTTON GPIO_NUM_5
 
+#define tag "MAIN"
+
+#define QUEUE_SIZE 10
+static QueueHandle_t message_queue;
+
 typedef struct {
     gpio_config_t config;
     uint8_t value;
@@ -51,8 +57,12 @@ void init_gpio(void) {
 
 void app_main(void)
 {
-    init_display_task();
-    init_io_task();
+    message_queue = xQueueCreate(QUEUE_SIZE, sizeof(uint8_t));
+    if (!message_queue) {
+        ESP_LOGE(tag, "Message queue could not be initialized.");
+    }
+    init_display_task(message_queue);
+    init_io_task(message_queue);
     init_gpio();
     size_t cnt = 0;
     while (1) {
