@@ -4,6 +4,7 @@
 #include "driver/gpio.h"
 #include "io.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 /*
  * macro to log a byte in binary
@@ -25,7 +26,7 @@
 #define SWITCH_2 GPIO_NUM_4
 #define SWITCH_3 GPIO_NUM_18
 #define SWITCH_4 GPIO_NUM_19
-#define BUTTON GPIO_NUM_5
+#define BUTTON_CONFIRMATION GPIO_NUM_5
 
 #define tag "IO"
 
@@ -34,7 +35,7 @@ typedef struct {
     uint8_t value;
 } IOConfig;
 
-IOConfig io_config[1] = {
+IOConfig io_config[2] = {
     {
         .config = {
             .mode = GPIO_MODE_INPUT,
@@ -44,8 +45,24 @@ IOConfig io_config[1] = {
             .pin_bit_mask = ((1ULL<<SWITCH_1) | (1ULL<<SWITCH_2) | (1ULL<<SWITCH_3) | (1ULL<<SWITCH_4)),
         },
         .value = 0
+    },
+    {
+        .config = {
+            .mode = GPIO_MODE_INPUT,
+            .intr_type = GPIO_INTR_DISABLE,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .pin_bit_mask = (1ULL<<BUTTON_CONFIRMATION),
+        },
+        .value = 0
     }
 };
+
+/** debounce defines */
+uint16_t debounce_delay_us = 50000; /** 50 ms */
+int64_t last_debounce_time_button_confirmation_us = 0;
+int last_level_button_confirmation = 1;
+int current_state_button_confirmation = 1;
 
 static void io_task(void* arg) {
     ESP_LOGD(tag, "In IO task.");
@@ -53,26 +70,40 @@ static void io_task(void* arg) {
     QueueHandle_t message_queue = (QueueHandle_t) arg;
 
     gpio_config(&io_config[0].config);
+    gpio_config(&io_config[1].config);
 
     size_t cnt = 0;
     while (1) {
         int level_switch_1 = gpio_get_level(SWITCH_1);
-        printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_3, level_switch_1);
+        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_3, level_switch_1);
         int level_switch_2 = gpio_get_level(SWITCH_2);
-        printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_4, level_switch_2);
+        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_4, level_switch_2);
         int level_switch_3 = gpio_get_level(SWITCH_3);
-        printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_18, level_switch_3);
+        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_18, level_switch_3);
         int level_switch_4 = gpio_get_level(SWITCH_4);
-        printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
+        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
         uint8_t bitmap = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
-        printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
-
-        if(xQueueSend(message_queue, &bitmap, (TickType_t)10) != pdPASS)
-        {
-            ESP_LOGE(tag, "Could not send message to message queue.");
+        // printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
+        
+        int level_button_confirmation = gpio_get_level(BUTTON_CONFIRMATION);
+        if (level_button_confirmation != last_level_button_confirmation) {
+            last_debounce_time_button_confirmation_us = esp_timer_get_time();
+        }
+        
+        if (esp_timer_get_time() - last_debounce_time_button_confirmation_us > debounce_delay_us) {
+            if (level_button_confirmation != current_state_button_confirmation) {
+                current_state_button_confirmation = level_button_confirmation;
+                if (current_state_button_confirmation == 0) {
+                    ESP_LOGI(tag, "Button pressed.");
+                } else {
+                    ESP_LOGI(tag, "Button released.");
+                }
+            }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        last_level_button_confirmation = level_button_confirmation;
+
+        vTaskDelay(pdMS_TO_TICKS(10));
         cnt += 1;
     }
 }
