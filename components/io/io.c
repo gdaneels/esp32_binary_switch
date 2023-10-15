@@ -60,9 +60,33 @@ IOConfig io_config[2] = {
 
 /** debounce defines */
 uint16_t debounce_delay_us = 50000; /** 50 ms */
-int64_t last_debounce_time_button_confirmation_us = 0;
-int last_level_button_confirmation = 1;
-int current_state_button_confirmation = 1;
+
+static void check_confirmation_button(QueueHandle_t message_queue, uint8_t bitmap) {
+    static int64_t last_debounce_time_button_confirmation_us = 0;
+    static int last_level_button_confirmation = 1;
+    static int current_state_button_confirmation = 1;
+
+    int level_button_confirmation = gpio_get_level(BUTTON_CONFIRMATION);
+    if (level_button_confirmation != last_level_button_confirmation) {
+        last_debounce_time_button_confirmation_us = esp_timer_get_time();
+    }
+    
+    if (esp_timer_get_time() - last_debounce_time_button_confirmation_us > debounce_delay_us) {
+        if (level_button_confirmation != current_state_button_confirmation) {
+            current_state_button_confirmation = level_button_confirmation;
+            if (current_state_button_confirmation == 0) {
+                ESP_LOGI(tag, "Button pressed.");
+                if (xQueueSend(message_queue, &bitmap, (TickType_t)10)) { 
+                    ESP_LOGI(tag, "Sent message: %"PRIu8"", bitmap);
+                }
+            } else {
+                ESP_LOGI(tag, "Button released.");
+            }
+        }
+    }
+
+    last_level_button_confirmation = level_button_confirmation;
+}
 
 static void io_task(void* arg) {
     ESP_LOGD(tag, "In IO task.");
@@ -84,24 +108,8 @@ static void io_task(void* arg) {
         // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
         uint8_t bitmap = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
         // printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
-        
-        int level_button_confirmation = gpio_get_level(BUTTON_CONFIRMATION);
-        if (level_button_confirmation != last_level_button_confirmation) {
-            last_debounce_time_button_confirmation_us = esp_timer_get_time();
-        }
-        
-        if (esp_timer_get_time() - last_debounce_time_button_confirmation_us > debounce_delay_us) {
-            if (level_button_confirmation != current_state_button_confirmation) {
-                current_state_button_confirmation = level_button_confirmation;
-                if (current_state_button_confirmation == 0) {
-                    ESP_LOGI(tag, "Button pressed.");
-                } else {
-                    ESP_LOGI(tag, "Button released.");
-                }
-            }
-        }
-
-        last_level_button_confirmation = level_button_confirmation;
+       
+        check_confirmation_button(message_queue, bitmap);
 
         vTaskDelay(pdMS_TO_TICKS(10));
         cnt += 1;
