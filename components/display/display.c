@@ -2,7 +2,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "display.h"
+#include "io.h"
 #include "esp_log.h"
+
+#define QUEUE_BLOCKING_TIME_MS 10
 
 #define tag "DISPLAY"
 
@@ -11,9 +14,9 @@ static void display_task(void* arg) {
 
     QueueHandle_t message_queue = (QueueHandle_t)arg;
     while(1) {
-        uint8_t number = 0;
-        if (xQueueReceive(message_queue, &number, (TickType_t)10)) { 
-            ESP_LOGI(tag, "Received message: %"PRIu8"", number);
+        IOMessage msg = { 0 };
+        if (xQueueReceive(message_queue, &msg, (TickType_t)pdMS_TO_TICKS(QUEUE_BLOCKING_TIME_MS))) { 
+            ESP_LOGI(tag, "Received message: %"PRIu8"", msg.value);
         }
     }
 }

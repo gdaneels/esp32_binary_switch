@@ -13,7 +13,7 @@ static QueueHandle_t message_queue;
 
 void app_main(void)
 {
-    message_queue = xQueueCreate(QUEUE_SIZE, sizeof(uint8_t));
+    message_queue = xQueueCreate(QUEUE_SIZE, sizeof(IOMessage));
     if (!message_queue) {
         ESP_LOGE(tag, "Message queue could not be initialized.");
     }

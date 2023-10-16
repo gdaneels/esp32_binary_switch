@@ -28,6 +28,8 @@
 #define SWITCH_4 GPIO_NUM_19
 #define BUTTON_CONFIRMATION GPIO_NUM_5
 
+#define QUEUE_BLOCKING_TIME_MS 10
+
 #define tag "IO"
 
 typedef struct {
@@ -61,7 +63,7 @@ IOConfig io_config[2] = {
 /** debounce defines */
 uint16_t debounce_delay_us = 50000; /** 50 ms */
 
-static void check_confirmation_button(QueueHandle_t message_queue, uint8_t bitmap) {
+static void check_confirmation_button(QueueHandle_t message_queue, IOMessage* msg) {
     static int64_t last_debounce_time_button_confirmation_us = 0;
     static int last_level_button_confirmation = 1;
     static int current_state_button_confirmation = 1;
@@ -76,8 +78,9 @@ static void check_confirmation_button(QueueHandle_t message_queue, uint8_t bitma
             current_state_button_confirmation = level_button_confirmation;
             if (current_state_button_confirmation == 0) {
                 ESP_LOGI(tag, "Button pressed.");
-                if (xQueueSend(message_queue, &bitmap, (TickType_t)10)) { 
-                    ESP_LOGI(tag, "Sent message: %"PRIu8"", bitmap);
+                msg->type = IO_VALUE;
+                if (xQueueSend(message_queue, msg, (TickType_t)pdMS_TO_TICKS(QUEUE_BLOCKING_TIME_MS))) { 
+                    ESP_LOGI(tag, "Sent message: %"PRIu8"", msg->value);
                 }
             } else {
                 ESP_LOGI(tag, "Button released.");
@@ -97,6 +100,7 @@ static void io_task(void* arg) {
     gpio_config(&io_config[1].config);
 
     size_t cnt = 0;
+    IOMessage msg = { 0 };
     while (1) {
         int level_switch_1 = gpio_get_level(SWITCH_1);
         // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_3, level_switch_1);
@@ -106,10 +110,10 @@ static void io_task(void* arg) {
         // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_18, level_switch_3);
         int level_switch_4 = gpio_get_level(SWITCH_4);
         // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
-        uint8_t bitmap = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
+        msg.value = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
         // printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
        
-        check_confirmation_button(message_queue, bitmap);
+        check_confirmation_button(message_queue, &msg);
 
         vTaskDelay(pdMS_TO_TICKS(10));
         cnt += 1;
