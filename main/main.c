@@ -9,6 +9,7 @@
 #define tag "MAIN"
 
 #define QUEUE_SIZE 10
+
 static QueueHandle_t message_queue;
 
 void app_main(void)
@@ -19,4 +20,5 @@ void app_main(void)
     }
     init_io_task(message_queue);
     init_display_task(message_queue);
+
 }
