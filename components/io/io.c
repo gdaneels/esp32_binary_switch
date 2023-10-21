@@ -68,30 +68,52 @@ IOConfig io_config[2] = {
 
 /** debounce defines */
 uint16_t debounce_delay_us = 50000; /** 50 ms */
+uint32_t long_press_us = 4000000; /** 2000 ms */
+
+static void send_message(QueueHandle_t message_queue, IOMessage* msg) { 
+    if (xQueueSend(message_queue, msg, (TickType_t)pdMS_TO_TICKS(QUEUE_BLOCKING_TIME_MS))) { 
+        ESP_LOGI(tag, "Sent message: %"PRIu8"", msg->value);
+    } else {
+        ESP_LOGE(tag, "Failed to send message with type %d and value %"PRIu8".", msg->type, msg->value);
+    }
+}
 
 static void check_confirmation_button(QueueHandle_t message_queue, IOMessage* msg) {
     static int64_t last_debounce_time_button_confirmation_us = 0;
     static int last_level_button_confirmation = 1;
-    static int current_state_button_confirmation = 1;
+    static int prev_state_button_confirmation = 1;
+    static bool long_pressed = false;
 
     int level_button_confirmation = gpio_get_level(BUTTON_CONFIRMATION);
     if (level_button_confirmation != last_level_button_confirmation) {
         last_debounce_time_button_confirmation_us = esp_timer_get_time();
     }
-    
+
     if (esp_timer_get_time() - last_debounce_time_button_confirmation_us > debounce_delay_us) {
-        if (level_button_confirmation != current_state_button_confirmation) {
-            current_state_button_confirmation = level_button_confirmation;
-            if (current_state_button_confirmation == 0) {
-                ESP_LOGI(tag, "Button pressed.");
-                msg->type = IO_VALUE;
-                if (xQueueSend(message_queue, msg, (TickType_t)pdMS_TO_TICKS(QUEUE_BLOCKING_TIME_MS))) { 
-                    ESP_LOGI(tag, "Sent message: %"PRIu8"", msg->value);
+        if (level_button_confirmation != prev_state_button_confirmation) {
+            /** button was released */
+            if (level_button_confirmation == 1) {
+                /** in case of short press, send when released */
+                if (!long_pressed) {
+                    ESP_LOGI(tag, "Button was released and short pressed.");
+                    msg->type = IO_VALUE;
+                    send_message(message_queue, msg);
                 }
-            } else {
-                ESP_LOGI(tag, "Button released.");
+                long_pressed = false; /** reset long press state */
+            }
+        } else if (level_button_confirmation == prev_state_button_confirmation && level_button_confirmation == 0) {
+            if (esp_timer_get_time() - last_debounce_time_button_confirmation_us > long_press_us) { 
+                /** check for long_press bool, so this can only be triggered once during the same press */
+                if (!long_pressed) {
+                    ESP_LOGI(tag, "Button hold down for long press.");
+                    long_pressed = true;
+                    /** in case of long press, send when still pressing */
+                    msg->type = IO_RESET;
+                    send_message(message_queue, msg);
+                }
             }
         }
+        prev_state_button_confirmation = level_button_confirmation;
     }
 
     last_level_button_confirmation = level_button_confirmation;
@@ -105,24 +127,18 @@ static void io_task(void* arg) {
     gpio_config(&io_config[0].config);
     gpio_config(&io_config[1].config);
 
-    size_t cnt = 0;
     IOMessage msg = { 0 };
     while (1) {
         int level_switch_1 = gpio_get_level(SWITCH_1);
-        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_3, level_switch_1);
         int level_switch_2 = gpio_get_level(SWITCH_2);
-        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_4, level_switch_2);
         int level_switch_3 = gpio_get_level(SWITCH_3);
-        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_18, level_switch_3);
         int level_switch_4 = gpio_get_level(SWITCH_4);
-        // printf("%zu: Level of pin %u is: %d.\n", cnt, GPIO_NUM_19, level_switch_4);
         msg.value = ((level_switch_4<<3) | (level_switch_3<<2) | (level_switch_2<<1) | (level_switch_1));
         // printf("Current bitmap: "BYTE_TO_BINARY_PATTERN": %u\n", BYTE_TO_BINARY(bitmap), bitmap);
        
         check_confirmation_button(message_queue, &msg);
 
         vTaskDelay(pdMS_TO_TICKS(10));
-        cnt += 1;
     }
 }
 
